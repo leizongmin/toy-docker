@@ -38,12 +38,7 @@ function cmdHelp() {
 }
 
 function cmdPull() {
-  const image = __args[3];
-  if (!image) return println("用法: tocker pull IMAGE");
-
-  const name = image.split(":")[0];
-  const tag = image.split(":")[1] || "latest";
-  const fullName = getImageFullName(name);
+  const { fullName, tag } = parseImageName(__args[3]);
 
   const url = `${registryMirror}/v2/${fullName}/manifests/${tag}`;
   const { code, output } = exCmd(true, `curl -s -L "${url}"`);
@@ -61,7 +56,7 @@ function cmdPull() {
     exCmd(false, `tar -xf "${tmpTar}" -C "${dir}"`);
   });
   exCmd(false, `rm -f "${tmpTar}"`);
-  fs.writefile(path.join(dir, "img.source"), `${fullName}:${tag}`);
+  fs.writefile(path.join(dir, "img.source"), getImageId(fullName, tag));
   log.info(`已成功拉取镜像${fullName}:${tag}`);
 }
 
@@ -78,9 +73,24 @@ function cmdImages() {
   });
 }
 
-function cmdRm() {}
-
-function cmdRmi() {}
+function cmdRmi() {
+  const raw = __args[3];
+  const { fullName, tag } = parseImageName(raw);
+  const images = loadLocalImages();
+  const id = getImageId(fullName, tag);
+  if (images[id]) {
+    exCmd(true, `rm -rf "${images[id].path}"`);
+    return log.info(`已删除镜像${id}`);
+  }
+  const img = Object.keys(images)
+    .map((id) => images[id])
+    .find((item) => item.uuid === raw);
+  if (img) {
+    exCmd(true, `rm -rf "${img.path}"`);
+    return log.info(`已删除镜像${id}`);
+  }
+  return log.fatal(`镜像${id}不存在`);
+}
 
 function cmdPs() {}
 
@@ -90,9 +100,23 @@ function cmdExec() {}
 
 function cmdLogs() {}
 
+function cmdRm() {}
+
 function exCmd(quiet, cmd, env = {}) {
   log.info(`RUN: ${cmd}`);
   return quiet ? exec1(cmd, env) : exec2(cmd, env);
+}
+
+function getImageId(fullName, tag) {
+  return `${fullName}:${tag}`;
+}
+
+function parseImageName(image) {
+  if (!image) return log.fatal("用法: tocker pull IMAGE");
+  const name = image.split(":")[0];
+  const tag = image.split(":")[1] || "latest";
+  const fullName = getImageFullName(name);
+  return { fullName, tag };
 }
 
 function getImageFullName(name) {
