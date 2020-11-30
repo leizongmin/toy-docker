@@ -44,11 +44,11 @@ function cmdPull() {
   const name = image.split(":")[0];
   const tag = image.split(":")[1] || "latest";
   const fullName = getImageFullName(name);
+
   const url = `${registryMirror}/v2/${fullName}/manifests/${tag}`;
   const { code, output } = exCmd(true, `curl -s -L "${url}"`);
   if (code !== 0) return log.error("无法拉取镜像元数据！");
   const manifests = JSON.parse(output);
-  println(JSON.stringify(manifests));
 
   const uuid = randomstring(16, "0123456789ABCDEF");
   const dir = path.join(imageDataPath, uuid);
@@ -65,7 +65,18 @@ function cmdPull() {
   log.info(`已成功拉取镜像${fullName}:${tag}`);
 }
 
-function cmdImages() {}
+function cmdImages() {
+  const images = loadLocalImages();
+  const list = Object.keys(images)
+    .map((n) => ({ ...images[n], id: n }))
+    .sort((a, b) => a.time - b.time);
+
+  println("UUID\t\t\t修改时间\t\t完整名称");
+  println("-".repeat(80));
+  list.forEach((item) => {
+    println("%s\t%s\t%s", item.uuid, formatdate("Y-m-d H:i:s", item.time), item.id);
+  });
+}
 
 function cmdRm() {}
 
@@ -86,4 +97,31 @@ function exCmd(quiet, cmd, env = {}) {
 
 function getImageFullName(name) {
   return name.includes("/") ? name : `library/${name}`;
+}
+
+function loadLocalImages() {
+  const images = {};
+  fs.readdir(imageDataPath)
+    .filter((s) => s.isdir)
+    .map((s) => ({ uuid: s.name, path: path.join(imageDataPath, s.name), time: s.modtime }))
+    .forEach((item) => {
+      const imgSource = path.join(item.path, "img.source");
+      if (fs.exist(imgSource)) {
+        const info = fs.readfile(imgSource);
+        if (images[info]) {
+          const old = images[info].time;
+          if (old.time < item.time) {
+            exCmd(true, `rm -rf "${old.path}"`);
+            images[info] = item;
+          } else {
+            exCmd(true, `rm -rf "${item.path}"`);
+          }
+        } else {
+          images[info] = item;
+        }
+      } else {
+        exCmd(true, `rm -rf "${item.path}"`);
+      }
+    });
+  return images;
 }
