@@ -1,0 +1,47 @@
+#!/usr/bin/env jssh
+
+cli.subcommand("pull", cmdPull);
+cli.subcommand("images", cmdImages);
+cli.subcommand("rm", cmdRm);
+cli.subcommand("rmi", cmdRmi);
+cli.subcommand("ps", cmdPs);
+cli.subcommand("run", cmdRun);
+cli.subcommand("exec", cmdExec);
+cli.subcommand("logs", cmdLogs);
+cli.subcommand("*", cmdHelp);
+cli.subcommandstart();
+
+function cmdHelp() {
+  const N = 14;
+  const rightPad = (s, len) => (s + " ".repeat(len)).slice(0, len);
+  println();
+  println("用法:	tocker COMMAND");
+  println();
+  println("命令:");
+  println(rightPad("  pull", N) + "从国内镜像源拉取Docker镜像");
+  println(rightPad("  images", N) + "列出已下载到本地的镜像");
+  println(rightPad("  rmi", N) + "删除指定的本地镜像");
+  println(rightPad("  rm", N) + "删除指定容器");
+  println(rightPad("  ps", N) + "列出所有容器");
+  println(rightPad("  run", N) + "启动新容器");
+  println(rightPad("  exec", N) + "在一个运行中的容器内执行指定命令");
+  println(rightPad("  logs", N) + "查看指定容器的日志输出");
+  println(rightPad("  help", N) + "打印本帮助信息");
+  println();
+}
+
+function cmdPull() {}
+
+function cmdImages() {}
+
+function cmdRm() {}
+
+function cmdRmi() {}
+
+function cmdPs() {}
+
+function cmdRun() {}
+
+function cmdExec() {}
+
+function cmdLogs() {}
