@@ -1,5 +1,12 @@
 #!/usr/bin/env jssh
 
+// Docker镜像源地址
+const dockerRegistryMirror =
+  __env.TOCKER_REGISTRY_MIRROR || "https://y73hag4a.mirror.aliyuncs.com";
+// 镜像本地存储目录
+const imageDataPath =
+  __env.TOCKER_DATA_PATH || path.join(__homedir, ".tocker", "images");
+
 cli.subcommand("pull", cmdPull);
 cli.subcommand("images", cmdImages);
 cli.subcommand("rm", cmdRm);
@@ -15,7 +22,7 @@ function cmdHelp() {
   const N = 14;
   const rightPad = (s, len) => (s + " ".repeat(len)).slice(0, len);
   println();
-  println("用法:	tocker COMMAND");
+  println("用法: tocker COMMAND");
   println();
   println("命令:");
   println(rightPad("  pull", N) + "从国内镜像源拉取Docker镜像");
@@ -30,7 +37,33 @@ function cmdHelp() {
   println();
 }
 
-function cmdPull() {}
+function cmdPull() {
+  const image = __args[3];
+  if (!image) return println("用法: tocker pull IMAGE");
+
+  const name = image.split(":")[0];
+  const tag = image.split(":")[1] || "latest";
+  const fullName = getImageFullName(name);
+  const url = `${dockerRegistryMirror}/v2/${fullName}/manifests/${tag}`;
+  const { code, output } = exCmd(true, `curl -s -L "${url}"`);
+  if (code !== 0) return log.error("无法拉取镜像元数据！");
+  const manifests = JSON.parse(output);
+  println(JSON.stringify(manifests));
+
+  const uuid = randomstring(16, "0123456789ABCDEF");
+  const dir = path.join(imageDataPath, uuid);
+  exCmd(false, `mkdir -p "${dir}"`);
+
+  const tmpTar = path.join(imageDataPath, `tmp_${uuid}.tar`);
+  manifests.fsLayers.forEach((item) => {
+    const url = `${dockerRegistryMirror}/v2/${fullName}/blobs/${item.blobSum}`;
+    exCmd(false, `curl -L -o "${tmpTar}" "${url}"`);
+    exCmd(false, `tar -xf "${tmpTar}" -C "${dir}"`);
+  });
+  exCmd(false, `rm -f "${tmpTar}"`);
+  fs.writefile(path.join(dir, "img.source"), `${fullName}:${tag}`);
+  log.info(`已成功拉取镜像${fullName}:${tag}`);
+}
 
 function cmdImages() {}
 
@@ -45,3 +78,12 @@ function cmdRun() {}
 function cmdExec() {}
 
 function cmdLogs() {}
+
+function exCmd(quiet, cmd, env = {}) {
+  log.info(`RUN: ${cmd}`);
+  return quiet ? exec1(cmd, env) : exec2(cmd, env);
+}
+
+function getImageFullName(name) {
+  return name.includes("/") ? name : `library/${name}`;
+}
