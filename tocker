@@ -1,11 +1,11 @@
 #!/usr/bin/env jssh
 
 // Docker镜像源地址
-const dockerRegistryMirror =
-  __env.TOCKER_REGISTRY_MIRROR || "https://y73hag4a.mirror.aliyuncs.com";
+const registryMirror = __env.TOCKER_REGISTRY_MIRROR || "https://y73hag4a.mirror.aliyuncs.com";
+// 数据根目录
+const tockerRoot = path.abs(__env.TOCKER_DATA_PATH || path.join(__homedir, ".tocker"));
 // 镜像本地存储目录
-const imageDataPath =
-  __env.TOCKER_DATA_PATH || path.join(__homedir, ".tocker", "images");
+const imageDataPath = path.join(tockerRoot, "images");
 
 cli.subcommand("pull", cmdPull);
 cli.subcommand("images", cmdImages);
@@ -44,7 +44,7 @@ function cmdPull() {
   const name = image.split(":")[0];
   const tag = image.split(":")[1] || "latest";
   const fullName = getImageFullName(name);
-  const url = `${dockerRegistryMirror}/v2/${fullName}/manifests/${tag}`;
+  const url = `${registryMirror}/v2/${fullName}/manifests/${tag}`;
   const { code, output } = exCmd(true, `curl -s -L "${url}"`);
   if (code !== 0) return log.error("无法拉取镜像元数据！");
   const manifests = JSON.parse(output);
@@ -56,7 +56,7 @@ function cmdPull() {
 
   const tmpTar = path.join(imageDataPath, `tmp_${uuid}.tar`);
   manifests.fsLayers.forEach((item) => {
-    const url = `${dockerRegistryMirror}/v2/${fullName}/blobs/${item.blobSum}`;
+    const url = `${registryMirror}/v2/${fullName}/blobs/${item.blobSum}`;
     exCmd(false, `curl -L -o "${tmpTar}" "${url}"`);
     exCmd(false, `tar -xf "${tmpTar}" -C "${dir}"`);
   });
