@@ -45,18 +45,20 @@ function cmdPull() {
   if (code !== 0) return log.error("无法拉取镜像元数据！");
   const manifests = JSON.parse(output);
 
-  const uuid = randomstring(16, "0123456789ABCDEF");
-  const dir = path.join(imageDataPath, uuid);
-  exCmd(false, `mkdir -p "${dir}"`);
+  const uuid = generateRandomId();
+  const imageDir = path.join(imageDataPath, uuid);
+  const fsRoot = path.join(imageDir, "root");
+  exCmd(false, `mkdir -p "${fsRoot}"`);
 
   const tmpTar = path.join(imageDataPath, `tmp_${uuid}.tar`);
   manifests.fsLayers.forEach((item) => {
     const url = `${registryMirror}/v2/${fullName}/blobs/${item.blobSum}`;
     exCmd(false, `curl -L -o "${tmpTar}" "${url}"`);
-    exCmd(false, `tar -xf "${tmpTar}" -C "${dir}"`);
+    exCmd(false, `tar -xf "${tmpTar}" -C "${fsRoot}"`);
   });
   exCmd(false, `rm -f "${tmpTar}"`);
-  fs.writefile(path.join(dir, "img.source"), getImageId(fullName, tag));
+  fs.writefile(path.join(imageDir, "img.source"), getImageId(fullName, tag));
+  fs.writefile(path.join(imageDir, "img.manifests"), output);
   log.info(`已成功拉取镜像${fullName}:${tag}`);
 }
 
@@ -66,7 +68,7 @@ function cmdImages() {
     .map((n) => ({ ...images[n], id: n }))
     .sort((a, b) => a.time - b.time);
 
-  println("UUID\t\t\t修改时间\t\t完整名称");
+  println("ID\t\t\t\t修改时间\t\t完整名称");
   println("-".repeat(80));
   list.forEach((item) => {
     println("%s\t%s\t%s", item.uuid, formatdate("Y-m-d H:i:s", item.time), item.id);
@@ -92,9 +94,9 @@ function cmdRmi() {
   return log.fatal(`镜像${id}不存在`);
 }
 
-function cmdPs() {}
-
 function cmdRun() {}
+
+function cmdPs() {}
 
 function cmdExec() {}
 
@@ -105,6 +107,10 @@ function cmdRm() {}
 function exCmd(quiet, cmd, env = {}) {
   log.info(`RUN: ${cmd}`);
   return quiet ? exec1(cmd, env) : exec2(cmd, env);
+}
+
+function generateRandomId() {
+  return formatdate("YmdHis") + randomstring(12, "0123456789ABCDEF");
 }
 
 function getImageId(fullName, tag) {
