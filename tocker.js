@@ -74,20 +74,41 @@ function cmdImages() {
 }
 
 function cmdRmi() {
-  const raw = __args[3];
-  const { longName, tag } = parseImageName(raw);
-  const images = loadLocalImages();
-  const img = Object.keys(images)
-    .map((id) => images[id])
-    .find((item) => item.id === raw || item.fullName === getImageFullName(longName, tag));
-  if (img) {
-    exCmd(true, `rm -rf "${img.path}"`);
-    return log.info(`已删除镜像${raw}`);
+  const name = __args[3];
+  const imageInfo = findImage(name);
+  if (imageInfo) {
+    exCmd(true, `rm -rf "${imageInfo.path}"`);
+    return log.info(`已删除镜像${name}`);
   }
-  return log.fatal(`镜像${raw}不存在`);
+  return log.fatal(`镜像${name}不存在`);
 }
 
-function cmdRun() {}
+function cmdRun() {
+  const imageName = __args[3];
+  const cmd = __args[3];
+
+  const imageInfo = findImage(imageName);
+  if (!imageInfo) {
+    return log.fatal(`镜像${name}不存在`);
+  }
+  const imageRoot = path.join(imageInfo.path, "root");
+
+  const containerId = generateRandomId();
+  const containerDir = path.join(containerDataPath, containerId);
+  const rootDir = path.join(containerDir, "root");
+  const mountDir = path.join(containerDir, "mount");
+  const workDir = path.join(containerDir, "work");
+
+  exCmd(true, `mkdir -p "${rootDir}"`);
+  exCmd(true, `mkdir -p "${mountDir}"`);
+  exCmd(true, `mkdir -p "${workDir}"`);
+  fs.writefile(path.join(containerDir, "meta.json"), JSON.stringify(imageInfo));
+
+  exCmd(
+    true,
+    `mount -t overlay -o lowerdir="${imageRoot}",upperdir="${rootDir}",workdir="${workDir}" "tocker_${containerId}" "${mountDir}"`,
+  );
+}
 
 function cmdPs() {}
 
@@ -153,4 +174,12 @@ function loadLocalImages() {
       }
     });
   return images;
+}
+
+function findImage(name) {
+  const { longName, tag } = parseImageName(name);
+  const images = loadLocalImages();
+  return Object.keys(images)
+    .map((id) => images[id])
+    .find((item) => item.id === name || item.fullName === getImageFullName(longName, tag));
 }
