@@ -144,9 +144,9 @@ function cmdRun() {
     `PS1="\\\$ "`,
     `chroot "${mountDir}"`,
   ];
-  const shFile = path.join(rootDir, "bin", "sh");
+  const shFile = path.join(mountDir, "bin", "sh");
   if (fs.exist(shFile)) {
-    cgCmd.push(`/bin/sh -c "mount -t proc proc /proc && ${cmd}"`);
+    cgCmd.push(`/bin/sh -c "mount -t proc proc /proc; ${cmd}"`);
   } else {
     cgCmd.push(cmd);
   }
