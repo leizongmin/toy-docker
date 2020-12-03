@@ -150,15 +150,8 @@ function cmdRun() {
   } else {
     cgCmd.push(cmd);
   }
-  exCmd(false, cgCmd.join(" "));
-
-  // 删除虚拟网络配置
-  exCmd(false, `ip link del dev veth0_${id}`);
-  exCmd(false, `ip netns del netns_${id}`);
-
-  // 删除所有文件
-  exCmd(false, `umount "${mountDir}"`);
-  exCmd(false, `rm -rf "${dir}"`);
+  const finalCmd = cgCmd.join(" ");
+  pty(finalCmd);
 }
 
 function cmdPs() {}
@@ -167,7 +160,14 @@ function cmdExec() {}
 
 function cmdLogs() {}
 
-function cmdRm() {}
+function cmdRm() {
+  // // 删除虚拟网络配置
+  // exCmd(false, `ip link del dev veth0_${id}`);
+  // exCmd(false, `ip netns del netns_${id}`);
+  // // 删除所有文件
+  // exCmd(false, `umount "${mountDir}"`);
+  // exCmd(false, `rm -rf "${dir}"`);
+}
 
 function exCmd(quiet, cmd, env = {}) {
   log.info(`RUN: ${cmd}`);
