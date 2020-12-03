@@ -156,13 +156,13 @@ function cmdRun() {
 
 function cmdPs() {
   const containers = loadContainers().sort((a, b) => a.time - b.time);
-  println("ID\tPID\t\t\t修改时间\t\t镜像");
+  println("PID\t状态\tID\t\t创建时间\t\t镜像");
   println("-".repeat(120));
   containers.forEach((item) => {
     println(
       "%s\t%s\t%s\t%s\t%s",
       item.pid,
-      item.active ? "active" : " ",
+      item.active ? "运行中" : "已停止",
       item.id,
       formatdate("Y-m-d H:i:s", item.time),
       item.image.fullName,
