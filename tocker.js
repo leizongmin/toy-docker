@@ -102,7 +102,7 @@ function cmdRun() {
   const mountDir = path.join(dir, "mount");
   const workDir = path.join(dir, "work");
   exCmd(false, `mkdir -p "${dir}"`);
-  fs.writefile(path.join(dir, "meta.json"), JSON.stringify(imageInfo));
+  fs.writefile(path.join(dir, "image.json"), JSON.stringify(imageInfo));
 
   // 挂载虚拟文件系统
   exCmd(false, `mkdir -p "${rootDir}"`);
@@ -154,7 +154,21 @@ function cmdRun() {
   pty(finalCmd);
 }
 
-function cmdPs() {}
+function cmdPs() {
+  const containers = loadContainers().sort((a, b) => a.time - b.time);
+  println("ID\tPID\t\t\t修改时间\t\t镜像");
+  println("-".repeat(120));
+  containers.forEach((item) => {
+    println(
+      "%s\t%s\t%s\t%s\t%s",
+      item.pid,
+      item.active ? "active" : " ",
+      item.id,
+      formatdate("Y-m-d H:i:s", item.time),
+      item.image.fullName,
+    );
+  });
+}
 
 function cmdExec() {}
 
@@ -229,4 +243,27 @@ function findImage(name) {
   return Object.keys(images)
     .map((id) => images[id])
     .find((item) => item.id === name || item.fullName === getImageFullName(longName, tag));
+}
+
+function loadContainers() {
+  return fs.readdir(containerDataPath).map((s) => {
+    const dir = path.join(containerDataPath, s.name);
+    if (!s.isdir) {
+      return exCmd(false, `rm -rf "${dir}"`);
+    }
+    const imageMetaFile = path.join(dir, "image.json");
+    if (!fs.exist(imageMetaFile)) {
+      return exCmd(false, `rm -rf "${dir}"`);
+    }
+    const image = JSON.parse(fs.readfile(imageMetaFile));
+    const id = s.name;
+    const line =
+      exec1(`ps o pid,cmd`)
+        .output.trim()
+        .split("\n")
+        .filter((line) => line.includes("unshare"))
+        .filter((line) => line.includes(dir))[0] || "";
+    const pid = line.trim().split(" ", 2)[0];
+    return { id, pid, active: !!pid, time: s.time, image, dir };
+  });
 }
