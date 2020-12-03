@@ -45,14 +45,14 @@ function cmdPull() {
   const { id, info, raw } = getImageManifests(longName, tag);
 
   const imageDir = path.join(imageDataPath, id);
-  const fsRoot = path.join(imageDir, "root");
-  exCmd(false, `mkdir -p "${fsRoot}"`);
+  const rootfs = path.join(imageDir, "rootfs");
+  exCmd(false, `mkdir -p "${rootfs}"`);
 
   const tmpTar = path.join(imageDataPath, `tmp_${id}.tar`);
   info.fsLayers.forEach((item) => {
     const url = `${registryMirror}/v2/${longName}/blobs/${item.blobSum}`;
     exCmd(false, `curl -L -o "${tmpTar}" "${url}"`);
-    exCmd(false, `tar -xf "${tmpTar}" -C "${fsRoot}"`);
+    exCmd(false, `tar -xf "${tmpTar}" -C "${rootfs}"`);
   });
   exCmd(false, `rm -f "${tmpTar}"`);
   fs.writefile(path.join(imageDir, "img.source"), fullName);
@@ -86,31 +86,32 @@ function cmdRmi() {
 function cmdRun() {
   const imageName = __args[3];
   const cmd = __args[4];
-  if (!cmd) {
-    return log.fatal(`用法：tocker run <image:tag> <cmd> [args...]`);
-  }
 
   const imageInfo = findImage(imageName);
   if (!imageInfo) {
     return log.fatal(`镜像${name}不存在`);
   }
-  const imageRoot = path.join(imageInfo.path, "root");
+  const imageManifests = JSON.parse(fs.readfile(path.join(imageInfo.path, "img.manifests")));
+  const imageConfig = JSON.parse(
+    (imageManifests.history && imageManifests.history[0] && imageManifests.history[0].v1Compatibility) || "{}",
+  ).config;
+  const imageRootfs = path.join(imageInfo.path, "rootfs");
 
   const id = randomstring(8).toLowerCase();
   const dir = path.join(containerDataPath, id);
-  const rootDir = path.join(dir, "root");
+  const rootfs = path.join(dir, "rootfs");
   const mountDir = path.join(dir, "mount");
   const workDir = path.join(dir, "work");
   exCmd(false, `mkdir -p "${dir}"`);
   fs.writefile(path.join(dir, "image.json"), JSON.stringify(imageInfo));
 
   // 挂载虚拟文件系统
-  exCmd(false, `mkdir -p "${rootDir}"`);
+  exCmd(false, `mkdir -p "${rootfs}"`);
   exCmd(false, `mkdir -p "${mountDir}"`);
   exCmd(false, `mkdir -p "${workDir}"`);
   exCmd(
     false,
-    `mount -t overlay -o lowerdir="${imageRoot}",upperdir="${rootDir}",workdir="${workDir}" "tocker_${id}" "${mountDir}"`,
+    `mount -t overlay -o lowerdir="${imageRootfs}",upperdir="${rootfs}",workdir="${workDir}" "tocker_${id}" "${mountDir}"`,
   );
 
   // 配置虚拟网络
@@ -133,24 +134,30 @@ function cmdRun() {
   exCmd(false, `cgset -r cpu.shares="512" "${id}"`);
   exCmd(false, `cgset -r memory.limit_in_bytes="${512 * 1000000}" "${id}"`);
   exCmd(false, `mkdir -p "${mountDir}/etc"`);
-  exCmd(false, `echo 'nameserver 114.114.114.114' > "${mountDir}/etc/resolv.conf"`);
+  exCmd(false, `echo "nameserver 114.114.114.114" > "${mountDir}/etc/resolv.conf"`);
   const cgCmd = [
     `cgexec -g "${cgroups}:${id}"`,
     `ip netns exec netns_${id}`,
     `unshare -fmuip --mount-proc`,
     `/usr/bin/env -i`,
-    `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
     `TERM=xterm`,
-    `PS1="\\\$ "`,
-    `chroot "${mountDir}"`,
   ];
-  const shFile = path.join(mountDir, "bin", "sh");
-  if (fs.exist(shFile)) {
-    cgCmd.push(`/bin/sh -c "mount -t proc proc /proc; ${cmd}"`);
-  } else {
-    cgCmd.push(cmd);
+  if (imageConfig.Env) {
+    imageConfig.Env.forEach((line) => cgCmd.push(line));
   }
+  cgCmd.push(`chroot "${mountDir}"`);
+  if (cmd) {
+    cgCmd.push(cmd);
+  } else {
+    if (imageConfig.Cmd) {
+      cgCmd.push(imageConfig.Cmd.join(" "));
+    } else {
+      log.fatal("缺少入口命令");
+    }
+  }
+
   const finalCmd = cgCmd.join(" ");
+  log.info(`RUN: ${finalCmd}`);
   pty(finalCmd);
 }
 
