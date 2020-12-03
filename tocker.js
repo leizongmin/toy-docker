@@ -125,21 +125,31 @@ function cmdRun() {
   exCmd(false, `ip netns exec netns_${id} ip addr add 172.15.${ip}/16 dev veth1_${id}`);
   exCmd(false, `ip netns exec netns_${id} ip link set dev veth1_${id} up`);
   exCmd(false, `ip netns exec netns_${id} ip route add default via 172.15.0.1`);
+  exCmd(false, `ip netns exec netns_${id} hostname "${id}"`);
 
   // cgroups启动程序
   const cgroups = "cpu,cpuacct,memory";
   exCmd(false, `cgcreate -g "${cgroups}:/${id}"`);
   exCmd(false, `cgset -r cpu.shares="512" "${id}"`);
   exCmd(false, `cgset -r memory.limit_in_bytes="${512 * 1000000}" "${id}"`);
+  exCmd(false, `mkdir -p "${mountDir}/etc"`);
   exCmd(false, `echo 'nameserver 114.114.114.114' > "${mountDir}/etc/resolv.conf"`);
   const cgCmd = [
     `cgexec -g "${cgroups}:${id}"`,
     `ip netns exec netns_${id}`,
     `unshare -fmuip --mount-proc`,
-    `/usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOSTNAME="${id}" TERM=xterm`,
+    `/usr/bin/env -i`,
+    `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
+    `TERM=xterm`,
+    `PS1="\\\$ "`,
     `chroot "${mountDir}"`,
-    `${cmd}`,
   ];
+  const shFile = path.join(rootDir, "bin", "sh");
+  if (fs.exist(shFile)) {
+    cgCmd.push(`/bin/sh -c "mount -t proc proc /proc && ${cmd}"`);
+  } else {
+    cgCmd.push(cmd);
+  }
   exCmd(false, cgCmd.join(" "));
 
   // 删除虚拟网络配置
