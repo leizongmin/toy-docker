@@ -85,7 +85,10 @@ function cmdRmi() {
 
 function cmdRun() {
   const imageName = __args[3];
-  const cmd = __args[3];
+  const cmd = __args[4];
+  if (!cmd) {
+    return log.fatal(`用法：tocker run <image:tag> <cmd> [args...]`);
+  }
 
   const imageInfo = findImage(imageName);
   if (!imageInfo) {
@@ -93,21 +96,54 @@ function cmdRun() {
   }
   const imageRoot = path.join(imageInfo.path, "root");
 
-  const containerId = generateRandomId();
-  const containerDir = path.join(containerDataPath, containerId);
-  const rootDir = path.join(containerDir, "root");
-  const mountDir = path.join(containerDir, "mount");
-  const workDir = path.join(containerDir, "work");
+  const id = randomstring(8).toLowerCase();
+  const dir = path.join(containerDataPath, id);
+  const rootDir = path.join(dir, "root");
+  const mountDir = path.join(dir, "mount");
+  const workDir = path.join(dir, "work");
+  exCmd(false, `mkdir -p "${dir}"`);
+  fs.writefile(path.join(dir, "meta.json"), JSON.stringify(imageInfo));
 
-  exCmd(true, `mkdir -p "${rootDir}"`);
-  exCmd(true, `mkdir -p "${mountDir}"`);
-  exCmd(true, `mkdir -p "${workDir}"`);
-  fs.writefile(path.join(containerDir, "meta.json"), JSON.stringify(imageInfo));
-
+  // 挂载虚拟文件系统
+  exCmd(false, `mkdir -p "${rootDir}"`);
+  exCmd(false, `mkdir -p "${mountDir}"`);
+  exCmd(false, `mkdir -p "${workDir}"`);
   exCmd(
-    true,
-    `mount -t overlay -o lowerdir="${imageRoot}",upperdir="${rootDir}",workdir="${workDir}" "tocker_${containerId}" "${mountDir}"`,
+    false,
+    `mount -t overlay -o lowerdir="${imageRoot}",upperdir="${rootDir}",workdir="${workDir}" "tocker_${id}" "${mountDir}"`,
   );
+
+  // 配置虚拟网络
+  const ip = `${parseInt(Math.random() * 254, 10) + 1}.${parseInt(Math.random() * 254, 10) + 1}`;
+  exCmd(false, `ip link add dev veth0_${id} type veth peer name veth1_${id}`);
+  exCmd(false, `ip link set dev veth0_${id} up`);
+  exCmd(false, `ip link set veth0_${id} master tocker0`);
+  exCmd(false, `ip netns add netns_${id}`);
+  exCmd(false, `ip link set veth1_${id} netns netns_${id}`);
+  exCmd(false, `ip netns exec netns_${id} ip link set dev lo up`);
+  // exCmd(false, `ip netns exec netns_${id} ip link set veth1_${id} address 02:42:ac:11:00"${mac}"`);
+  exCmd(false, `ip netns exec netns_${id} ip addr add 172.15.${ip}/16 dev veth1_${id}`);
+  exCmd(false, `ip netns exec netns_${id} ip link set dev veth1_${id} up`);
+  exCmd(false, `ip netns exec netns_${id} ip route add default via 172.15.0.1`);
+
+  // cgroups启动程序
+  const cgroups = "cpu,cpuacct,memory";
+  exCmd(false, `cgcreate -g "${cgroups}:/${id}"`);
+  exCmd(false, `cgset -r cpu.shares="512" "${id}"`);
+  exCmd(false, `cgset -r memory.limit_in_bytes="${512 * 1000000}" "${id}"`);
+  exCmd(false, `echo 'nameserver 114.114.114.114' > "${mountDir}/etc/resolv.conf"`);
+  const cgCmd = [
+    `cgexec -g "${cgroups}:${id}"`,
+    `ip netns exec netns_${id}`,
+    `unshare -fmuip --mount-proc`,
+    `chroot "${mountDir}"`,
+    `${cmd}`,
+  ];
+  exCmd(false, cgCmd.join(" "));
+
+  // 删除虚拟网络配置
+  exCmd(false, `ip link del dev veth0_${id}`);
+  exCmd(false, `ip netns del netns_${id}`);
 }
 
 function cmdPs() {}
@@ -135,10 +171,6 @@ function getImageManifests(longName, tag) {
     log.fatal(`无法获取镜像元数据：无法获取docker-content-digest响应头`);
   }
   return { id, info, raw: res.body };
-}
-
-function generateRandomId() {
-  return formatdate("YmdHis") + randomstring(12, "0123456789ABCDEF");
 }
 
 function getImageFullName(longName, tag) {
