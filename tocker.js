@@ -136,6 +136,7 @@ function cmdRun() {
     `cgexec -g "${cgroups}:${id}"`,
     `ip netns exec netns_${id}`,
     `unshare -fmuip --mount-proc`,
+    `/usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOSTNAME="${id}" TERM=xterm`,
     `chroot "${mountDir}"`,
     `${cmd}`,
   ];
@@ -144,6 +145,10 @@ function cmdRun() {
   // 删除虚拟网络配置
   exCmd(false, `ip link del dev veth0_${id}`);
   exCmd(false, `ip netns del netns_${id}`);
+
+  // 删除所有文件
+  exCmd(false, `umount "${mountDir}"`);
+  exCmd(false, `rm -rf "${dir}"`);
 }
 
 function cmdPs() {}
