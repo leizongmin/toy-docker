@@ -89,7 +89,7 @@ function cmdRun() {
 
   const imageInfo = findImage(imageName);
   if (!imageInfo) {
-    return log.fatal(`镜像${name}不存在`);
+    return log.fatal(`镜像${imageName}不存在`);
   }
   const imageManifests = JSON.parse(fs.readfile(path.join(imageInfo.path, "img.manifests")));
   const imageConfig = JSON.parse(
