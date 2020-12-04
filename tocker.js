@@ -153,14 +153,23 @@ function cmdRun() {
     imageConfig.Env.forEach((line) => cgCmd.push(line));
   }
   cgCmd.push(`chroot "${mountDir}"`);
-  if (cmd) {
-    cgCmd.push(cmd);
-  } else {
+
+  // 进入之后启动的命令
+  let entryCmd = cmd;
+  if (!entryCmd) {
     if (imageConfig.Cmd) {
-      cgCmd.push(imageConfig.Cmd.join(" "));
+      entryCmd = imageConfig.Cmd.join(" ");
     } else {
       log.fatal("缺少入口命令");
     }
+  }
+  if (fs.exist(path.join(mountDir, "bin", "sh"))) {
+    const entryFile = path.join(mountDir, ".tocker-entry.sh");
+    fs.writefile(entryFile, `mount -t proc proc /proc\n${entryCmd}`);
+    exCmd(false, `chmod +x "${entryFile}"`);
+    cgCmd.push(`sh /.tocker-entry.sh`);
+  } else {
+    cgCmd.push(entryCmd);
   }
 
   const finalCmd = cgCmd.join(" ");
