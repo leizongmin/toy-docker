@@ -147,11 +147,9 @@ function cmdRun() {
     `ip netns exec netns_${id}`,
     `unshare -fmuip --mount-proc`,
     `/usr/bin/env -i`,
-    `TERM=xterm`,
   ];
-  if (imageConfig.Env) {
-    imageConfig.Env.forEach((line) => cgCmd.push(line));
-  }
+  if (__env.TERM) cgCmd.push(`TERM=${__env.TERM}`);
+  if (imageConfig.Env) imageConfig.Env.forEach((line) => cgCmd.push(line));
   cgCmd.push(`chroot "${mountDir}"`);
 
   // 进入之后启动的命令
