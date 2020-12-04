@@ -8,6 +8,8 @@ const tockerRoot = path.abs(__env.TOCKER_DATA_PATH || path.join(__homedir, ".toc
 const imageDataPath = path.join(tockerRoot, "images");
 // 容器本地存储目录
 const containerDataPath = path.join(tockerRoot, "containers");
+// cgroups限制分组
+const cgroups = "cpu,cpuacct,memory";
 
 cli.subcommand("pull", cmdPull);
 cli.subcommand("images", cmdImages);
@@ -114,6 +116,12 @@ function cmdRun() {
     `mount -t overlay -o lowerdir="${imageRootfs}",upperdir="${rootfs}",workdir="${workDir}" "tocker_${id}" "${mountDir}"`,
   );
 
+  if (imageConfig && imageConfig.Volumes) {
+    Object.keys(imageConfig.Volumes).forEach((n) => {
+      exCmd(false, `mkdir -p "${rootfs}${n}"`);
+    });
+  }
+
   // 配置虚拟网络
   const ip = `${parseInt(Math.random() * 254, 10) + 1}.${parseInt(Math.random() * 254, 10) + 1}`;
   exCmd(false, `ip link add dev veth0_${id} type veth peer name veth1_${id}`);
@@ -129,7 +137,6 @@ function cmdRun() {
   exCmd(false, `ip netns exec netns_${id} hostname "${id}"`);
 
   // cgroups启动程序
-  const cgroups = "cpu,cpuacct,memory";
   exCmd(false, `cgcreate -g "${cgroups}:/${id}"`);
   exCmd(false, `cgset -r cpu.shares="512" "${id}"`);
   exCmd(false, `cgset -r memory.limit_in_bytes="${512 * 1000000}" "${id}"`);
@@ -205,6 +212,8 @@ function cmdRm() {
   // 删除虚拟网络配置
   exCmd(false, `ip link del dev veth0_${container.id}`);
   exCmd(false, `ip netns del netns_${container.id}`);
+  // 删除cgroups命名空间
+  exCmd(false, `cgdelete -g "${cgroups}:${id}"`);
   // 删除所有文件
   exCmd(false, `umount "${path.join(container.dir, "mount")}"`);
   exCmd(false, `rm -rf "${container.dir}"`);
