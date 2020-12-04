@@ -163,31 +163,51 @@ function cmdRun() {
 
 function cmdPs() {
   const containers = loadContainers().sort((a, b) => a.time - b.time);
-  println("PID\t状态\tID\t\t创建时间\t\t镜像");
+  println("ID\t\t状态\tPID\t创建时间\t\t镜像");
   println("-".repeat(120));
   containers.forEach((item) => {
     println(
       "%s\t%s\t%s\t%s\t%s",
-      item.pid,
+      item.id || "",
       item.active ? "运行中" : "已停止",
-      item.id,
+      item.pid || "-",
       formatdate("Y-m-d H:i:s", item.time),
       item.image.fullName,
     );
   });
 }
 
-function cmdExec() {}
+function cmdExec() {
+  const id = cli.get(1);
+  const cmd = cli.args().slice(2).join(" ");
+  if (!id || !cmd) return log.fatal(`用法：tocker exec <container_id> <cmd> [...args]`);
+
+  const container = loadContainers().find((c) => c.id === id);
+  if (!container) return log.fatal(`容器${id}不存在`);
+  if (!container.active || !container.pid) return log.fatal(`容器${id}已停止运行`);
+  const mountDir = path.join(container.dir, "mount");
+
+  const finalCmd = `nsenter -t "${container.pid}" -m -u -i -n -p chroot "${mountDir}" ${cmd}`;
+  log.info(`RUN: ${finalCmd}`);
+  pty(finalCmd);
+}
 
 function cmdLogs() {}
 
 function cmdRm() {
-  // // 删除虚拟网络配置
-  // exCmd(false, `ip link del dev veth0_${id}`);
-  // exCmd(false, `ip netns del netns_${id}`);
-  // // 删除所有文件
-  // exCmd(false, `umount "${mountDir}"`);
-  // exCmd(false, `rm -rf "${dir}"`);
+  const id = cli.get(1);
+  if (!id) return log.fatal(`用法：tocker rm <container_id>`);
+
+  const container = loadContainers().find((c) => c.id === id);
+  if (!container) return log.fatal(`容器${id}不存在`);
+  if (container.active) return log.fatal(`容器${id}正在运行，不能删除`);
+
+  // 删除虚拟网络配置
+  exCmd(false, `ip link del dev veth0_${container.id}`);
+  exCmd(false, `ip netns del netns_${container.id}`);
+  // 删除所有文件
+  exCmd(false, `umount "${path.join(container.dir, "mount")}"`);
+  exCmd(false, `rm -rf "${container.dir}"`);
 }
 
 function exCmd(quiet, cmd, env = {}) {
@@ -253,24 +273,28 @@ function findImage(name) {
 }
 
 function loadContainers() {
-  return fs.readdir(containerDataPath).map((s) => {
-    const dir = path.join(containerDataPath, s.name);
-    if (!s.isdir) {
-      return exCmd(false, `rm -rf "${dir}"`);
-    }
-    const imageMetaFile = path.join(dir, "image.json");
-    if (!fs.exist(imageMetaFile)) {
-      return exCmd(false, `rm -rf "${dir}"`);
-    }
-    const image = JSON.parse(fs.readfile(imageMetaFile));
-    const id = s.name;
-    const line =
-      exec1(`ps o pid,cmd`)
-        .output.trim()
-        .split("\n")
-        .filter((line) => line.includes("unshare"))
-        .filter((line) => line.includes(dir))[0] || "";
-    const pid = line.trim().split(" ", 2)[0];
-    return { id, pid, active: !!pid, time: s.time, image, dir };
-  });
+  return fs
+    .readdir(containerDataPath)
+    .map((s) => {
+      const dir = path.join(containerDataPath, s.name);
+      if (!s.isdir) {
+        return exCmd(false, `rm -rf "${dir}"`);
+      }
+      const imageMetaFile = path.join(dir, "image.json");
+      if (!fs.exist(imageMetaFile)) {
+        exCmd(false, `umount "${path.join(dir, "mount")}"`);
+        return exCmd(false, `rm -rf "${dir}"`);
+      }
+      const image = JSON.parse(fs.readfile(imageMetaFile));
+      const id = s.name;
+      const line =
+        exec1(`ps o pid,cmd`)
+          .output.trim()
+          .split("\n")
+          .filter((line) => line.includes("unshare"))
+          .filter((line) => line.includes(dir))[0] || "";
+      const pid = line.trim().split(" ", 2)[0];
+      return { id, pid, active: !!pid, time: s.time, image, dir };
+    })
+    .filter((c) => c && c.image);
 }
