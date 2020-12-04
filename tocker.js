@@ -163,7 +163,7 @@ function cmdRun() {
   }
   if (fs.exist(path.join(mountDir, "bin", "sh"))) {
     const entryFile = path.join(mountDir, ".tocker-entry.sh");
-    fs.writefile(entryFile, `mount -t proc proc /proc\n${entryCmd}`);
+    fs.writefile(entryFile, `/bin/mount -t proc proc /proc && ${entryCmd}`);
     exCmd(false, `chmod +x "${entryFile}"`);
     cgCmd.push(`sh /.tocker-entry.sh`);
   } else {
