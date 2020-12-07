@@ -134,7 +134,6 @@ function cmdRun() {
   exCmd(false, `ip netns exec netns_${id} ip addr add 172.15.${ip}/16 dev veth1_${id}`);
   exCmd(false, `ip netns exec netns_${id} ip link set dev veth1_${id} up`);
   exCmd(false, `ip netns exec netns_${id} ip route add default via 172.15.0.1`);
-  exCmd(false, `ip netns exec netns_${id} hostname "${id}"`);
 
   // cgroups启动程序
   exCmd(false, `cgcreate -g "${cgroups}:/${id}"`);
@@ -163,7 +162,7 @@ function cmdRun() {
   }
   if (fs.exist(path.join(mountDir, "bin", "sh"))) {
     const entryFile = path.join(mountDir, ".tocker-entry.sh");
-    fs.writefile(entryFile, `/bin/mount -t proc proc /proc && ${entryCmd}`);
+    fs.writefile(entryFile, `/bin/mount -t proc proc /proc && hostname "${id}" && ${entryCmd}`);
     exCmd(false, `chmod +x "${entryFile}"`);
     cgCmd.push(`sh /.tocker-entry.sh`);
   } else {
