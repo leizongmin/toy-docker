@@ -11,6 +11,7 @@ const containerDataPath = path.join(tockerRoot, "containers");
 // cgroups限制分组
 const cgroups = "cpu,cpuacct,memory";
 
+init();
 cli.subcommand("pull", cmdPull);
 cli.subcommand("images", cmdImages);
 cli.subcommand("rm", cmdRm);
@@ -39,6 +40,33 @@ function cmdHelp() {
   println(rightPad("  logs", N) + "查看指定容器的日志输出");
   println(rightPad("  help", N) + "打印本帮助信息");
   println();
+}
+
+function init() {
+  if (!networkinterfaces().tocker0) {
+    const tmpFile = path.join(__tmpdir, `tocker-init-${randomstring(10)}.sh`);
+    fs.writefile(
+      tmpFile,
+      `
+# 配置tocker网桥
+ip link del tocker0
+ip link add name tocker0 type bridge
+ip link set tocker0 up
+ip addr add 172.15.0.1/16 dev tocker0
+
+# 设置IP转发
+echo 1 > /proc/sys/net/ipv4/ip_forward
+
+# 将源地址为172.15.0.0/16并且不是tocker0网卡发出的数据进行源地址转换
+# iptables -F && iptables -X
+iptables -t nat -A POSTROUTING -o tocker0 -j MASQUERADE
+iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+iptables -t nat -L -n
+    `.trim(),
+    );
+    exCmd(false, `sh "${tmpFile}"`);
+    exCmd(false, `rm -f "${tmpFile}"`);
+  }
 }
 
 function cmdPull() {
