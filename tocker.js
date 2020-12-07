@@ -205,7 +205,9 @@ function cmdExec() {
   pty(finalCmd);
 }
 
-function cmdLogs() {}
+function cmdLogs() {
+  log.fatal(`暂不支持该命令`);
+}
 
 function cmdRm() {
   const id = cli.get(1);
