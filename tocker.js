@@ -226,7 +226,15 @@ function cmdExec() {
   if (!container.active || !container.pid) return log.fatal(`容器${id}已停止运行`);
   const mountDir = path.join(container.dir, "mount");
 
-  const finalCmd = `nsenter -t "${container.pid}" -m -u -i -n -p chroot "${mountDir}" ${cmd}`;
+  const process = exec1(`ps o ppid,pid | grep ${container.pid}`)
+    .output.trim()
+    .split("\n")
+    .map((s) => s.trim().split(/\s+/))
+    .map((v) => ({ ppid: v[0], pid: v[1] }))
+    .find((v) => v.ppid === container.pid);
+  if (!process) return log.fatal(`找不到容器的第一个进程`);
+
+  const finalCmd = `nsenter -t "${process.pid}" -m -u -i -n -p chroot "${mountDir}" ${cmd}`;
   log.info(`RUN: ${finalCmd}`);
   pty(finalCmd);
 }
